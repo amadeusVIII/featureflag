@@ -1,0 +1,134 @@
+# Docker Compose V2 syntax — use "docker compose" not "docker-compose"
+# This file defines the production-like environment.
+# For local dev extras (ports, GUI tools), see docker-compose.override.yml
+
+services:
+
+  # ─────────────────────────────────────────────
+  # NGINX — the front door of the entire system
+  # All traffic enters here. Nginx decides whether
+  # to route it to the API or the frontend.
+  # ─────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    ports:
+      # Map port 80 on your laptop to port 80 inside the container
+      # This means you visit http://localhost in your browser
+      - "80:80"
+    volumes:
+      # Mount our nginx config file into the container (read-only)
+      # The container will use OUR config, not the default nginx config
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      # Nginx should only start after the API is healthy
+      # Otherwise it would route traffic to a server that isn't ready
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ─────────────────────────────────────────────
+  # API — the Spring Boot application
+  # We build this from our own Dockerfile
+  # ─────────────────────────────────────────────
+  api:
+    # "build" means Docker will BUILD this image from our Dockerfile
+    # context: . means the Dockerfile can access files from the root folder
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    environment:
+      # These values come from the .env file on your machine
+      # Spring Boot reads them automatically as configuration properties
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/featureflag
+      - SPRING_DATASOURCE_USERNAME=${DB_USER}
+      - SPRING_DATASOURCE_PASSWORD=${DB_PASS}
+      # "postgres" here is the SERVICE NAME above — Docker resolves it
+      # to the correct internal IP address automatically
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
+      - JWT_SECRET=${JWT_SECRET}
+      - SPRING_PROFILES_ACTIVE=prod
+    depends_on:
+      # Critical: don't start the API until both DB and cache are ready
+      # Without this, Spring Boot tries to connect and crashes on startup
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # Spring Actuator exposes /actuator/health automatically
+      # This is why we added spring-boot-starter-actuator as a dependency
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # Give Spring Boot time to start up before the first check
+      start_period: 60s
+    restart: unless-stopped
+
+  # ─────────────────────────────────────────────
+  # POSTGRESQL — the primary database
+  # Source of truth for all flag and user data
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:17-alpine
+    # alpine = minimal Linux base image, much smaller than the default
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: featureflag
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      # Named volume — data persists even if the container is stopped/removed
+      # Without this, ALL your data would be lost every time you restart
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready is a built-in PostgreSQL tool that checks if the DB
+      # is accepting connections — perfect for our health check
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d featureflag"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────────
+  # REDIS — the caching layer
+  # Used for: flag cache + Pub/Sub invalidation
+  # ─────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --save 60 1
+      --loglevel warning
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    # --save 60 1: persist to disk if at least 1 key changed in 60 seconds
+    # --loglevel warning: reduce noise in logs
+    # --maxmemory 256mb: cap memory usage
+    # --maxmemory-policy allkeys-lru: when memory is full, evict the
+    #   least-recently-used keys (safe for a cache — we can always reload from DB)
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      # redis-cli ping returns "PONG" if Redis is healthy
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# ─────────────────────────────────────────────
+# VOLUMES — named persistent storage
+# Docker manages these on your machine.
+# Data survives container restarts.
+# Remove with: docker compose down -v
+# ─────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

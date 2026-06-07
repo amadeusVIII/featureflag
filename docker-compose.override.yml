@@ -1,0 +1,48 @@
+# This file is automatically merged with docker-compose.yml in local dev.
+# It ADDS to the base config — it does not replace it.
+# NEVER commit secrets here. NEVER use this in production.
+
+services:
+
+  api:
+    ports:
+      # Expose the API directly for testing with Postman/curl
+      - "8080:8080"
+      # Port 5005 is for remote debugging — attach IntelliJ debugger
+      # to localhost:5005 and you can set breakpoints inside the container
+      - "5005:5005"
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      # Enable remote JVM debugging inside the container
+      # suspend=n means the app starts immediately without waiting
+      # for a debugger to attach
+      - JAVA_TOOL_OPTIONS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+
+  postgres:
+    ports:
+      # Expose PostgreSQL so you can connect with DBeaver or DataGrip
+      # on your local machine for inspecting data during development
+      - "5432:5432"
+
+  redis:
+    ports:
+      # Expose Redis so you can use redis-cli locally
+      - "6379:6379"
+
+  # ─────────────────────────────────────────────
+  # REDIS COMMANDER — visual Redis GUI
+  # Only in dev — remove from prod completely
+  # Access at: http://localhost:8001
+  # ─────────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8001:8081"
+    environment:
+      # Tell Redis Commander how to connect to our Redis container
+      # "redis" is the service name — Docker resolves it automatically
+      - REDIS_HOSTS=local:redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped

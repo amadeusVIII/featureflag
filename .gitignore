@@ -1,0 +1,25 @@
+# Maven build output
+target/
+*.jar
+*.war
+
+# IDE files — never commit these
+.idea/
+*.iml
+.vscode/
+*.classpath
+*.project
+.settings/
+
+# Environment files — NEVER commit real secrets
+.env
+# but DO commit the example file so teammates know what's needed
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

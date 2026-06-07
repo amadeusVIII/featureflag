@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        This is the PARENT POM. It doesn't contain any application code.
+        Its only job is to define shared configuration for all child modules.
+        Think of it as the "umbrella" that holds the api and sdk together.
+    -->
+    <groupId>com.featureflag</groupId>
+    <artifactId>featureflag-parent</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+
+    <!--
+        "pom" packaging means this module produces no JAR or WAR.
+        It exists solely as a configuration parent.
+    -->
+    <packaging>pom</packaging>
+    <name>FeatureFlag Parent</name>
+
+    <!--
+        The modules listed here are the child projects Maven will manage.
+        The order matters: sdk has no dependencies on api, so either order
+        works here — but list sdk first so it's built before api (good habit).
+    -->
+    <modules>
+        <module>sdk</module>
+        <module>api</module>
+    </modules>
+
+    <!--
+        We inherit from Spring Boot's parent POM. This gives us:
+        - Managed versions for hundreds of Spring and third-party libraries
+        - Default Maven plugin configuration (compiler, surefire, etc.)
+        - The spring-boot-maven-plugin pre-configured
+        Without this, we'd have to specify every library version manually.
+    -->
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.1</version>
+        <relativePath/>
+    </parent>
+
+    <!--
+        Properties here act as constants we can reuse across this file
+        and all child POMs. If we want to upgrade Java or a library,
+        we change it in ONE place, not in every module.
+    -->
+    <properties>
+        <java.version>21</java.version>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- Library versions — defined here, referenced in child POMs -->
+        <jjwt.version>0.12.6</jjwt.version>
+        <mapstruct.version>1.6.3</mapstruct.version>
+        <testcontainers.version>1.20.4</testcontainers.version>
+    </properties>
+
+    <!--
+        dependencyManagement does NOT add dependencies to child modules.
+        It only defines the VERSION to use IF a child module declares
+        that dependency. This prevents version conflicts across modules.
+
+        Think of it as a price list: it sets the price, but the child
+        module still has to "order" (declare) what it wants.
+    -->
+    <dependencyManagement>
+        <dependencies>
+            <!-- JWT library for creating and validating tokens -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+
+            <!-- MapStruct for compile-time type-safe Entity <-> DTO mapping -->
+            <dependency>
+                <groupId>org.mapstruct</groupId>
+                <artifactId>mapstruct</artifactId>
+                <version>${mapstruct.version}</version>
+            </dependency>
+
+            <!-- Testcontainers BOM — manages all testcontainers module versions -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <!--
+                    Checkstyle enforces code style rules across all modules.
+                    We'll add the actual rules file (checkstyle.xml) in a moment.
+                    Having it here means all child modules inherit this config.
+                -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-checkstyle-plugin</artifactId>
+                    <version>3.6.0</version>
+                    <configuration>
+                        <configLocation>checkstyle.xml</configLocation>
+                        <failsOnError>true</failsOnError>
+                        <consoleOutput>true</consoleOutput>
+                    </configuration>
+                </plugin>
+
+                <!--
+                    MapStruct needs to run as an annotation processor during
+                    compilation. We configure it here so every module that uses
+                    MapStruct gets this setup automatically.
+                -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <configuration>
+                        <source>21</source>
+                        <target>21</target>
+                        <annotationProcessorPaths>
+                            <!-- Lombok must come BEFORE MapStruct -->
+                            <path>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                                <version>${lombok.version}</version>
+                            </path>
+                            <path>
+                                <groupId>org.mapstruct</groupId>
+                                <artifactId>mapstruct-processor</artifactId>
+                                <version>${mapstruct.version}</version>
+                            </path>
+                        </annotationProcessorPaths>
+                    </configuration>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+</project>

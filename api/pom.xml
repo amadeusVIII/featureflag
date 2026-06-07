@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+	<parent>
+		<groupId>com.featureflag</groupId>
+		<artifactId>featureflag-parent</artifactId>
+		<version>1.0.0-SNAPSHOT</version>
+		<!--
+            relativePath tells Maven where to find the parent POM on disk.
+            ".." means "one folder up" — the featureflag/ root directory.
+        -->
+		<relativePath>../pom.xml</relativePath>
+	</parent>
+	<artifactId>featureflag-api</artifactId>
+	<name>FeatureFlag API</name>
+
+	<description/>
+	<url/>
+	<licenses>
+		<license/>
+	</licenses>
+	<developers>
+		<developer/>
+	</developers>
+	<scm>
+		<connection/>
+		<developerConnection/>
+		<tag/>
+		<url/>
+	</scm>
+	<properties>
+		<java.version>21</java.version>
+	</properties>
+	<dependencies>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-security</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-validation</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-core</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.flywaydb</groupId>
+			<artifactId>flyway-database-postgresql</artifactId>
+		</dependency>
+
+		<dependency>
+			<groupId>org.postgresql</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.projectlombok</groupId>
+			<artifactId>lombok</artifactId>
+			<optional>true</optional>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>com.featureflag</groupId>
+			<artifactId>featureflag-sdk</artifactId>
+			<version>${project.version}</version>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-api</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-impl</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+		<dependency>
+			<groupId>io.jsonwebtoken</groupId>
+			<artifactId>jjwt-jackson</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+		<!-- MapStruct -->
+		<dependency>
+			<groupId>org.mapstruct</groupId>
+			<artifactId>mapstruct</artifactId>
+		</dependency>
+
+		<!-- Testcontainers -->
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<dependency>
+			<groupId>org.testcontainers</groupId>
+			<artifactId>postgresql</artifactId>
+			<scope>test</scope>
+		</dependency>
+
+
+	</dependencies>
+
+
+
+	<profiles>
+		<!-- Run integration tests with: ./mvnw.cmd verify -pl api -Pintegration-tests -->
+		<!-- Unit tests still run with: ./mvnw.cmd test (fast, no Docker) -->
+		<profile>
+			<id>integration-tests</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.apache.maven.plugins</groupId>
+						<artifactId>maven-failsafe-plugin</artifactId>
+						<!-- Failsafe runs files named *IT.java or *IntegrationTest.java -->
+						<!-- Surefire (default) runs *Test.java — our unit tests -->
+						<!-- This separation is the industry standard pattern -->
+						<configuration>
+							<includes>
+								<include>**/*IntegrationTest.java</include>
+								<include>**/*IT.java</include>
+							</includes>
+						</configuration>
+						<executions>
+							<execution>
+								<goals>
+									<!-- integration-test: compile and run the tests -->
+									<!-- verify: check results and fail if any failed -->
+									<goal>integration-test</goal>
+									<goal>verify</goal>
+								</goals>
+							</execution>
+						</executions>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+	</profiles>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+				<configuration>
+					<excludes>
+						<exclude>
+							<groupId>org.projectlombok</groupId>
+							<artifactId>lombok</artifactId>
+						</exclude>
+					</excludes>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>default-compile</id>
+						<phase>compile</phase>
+						<goals>
+							<goal>compile</goal>
+						</goals>
+						<configuration>
+							<annotationProcessorPaths>
+								<path>
+									<groupId>org.projectlombok</groupId>
+									<artifactId>lombok</artifactId>
+								</path>
+							</annotationProcessorPaths>
+						</configuration>
+					</execution>
+					<execution>
+						<id>default-testCompile</id>
+						<phase>test-compile</phase>
+						<goals>
+							<goal>testCompile</goal>
+						</goals>
+						<configuration>
+							<annotationProcessorPaths>
+								<path>
+									<groupId>org.projectlombok</groupId>
+									<artifactId>lombok</artifactId>
+								</path>
+							</annotationProcessorPaths>
+						</configuration>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+</project>
