@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    CI-specific Maven settings — safe to commit, contains NO secrets.
+    GitHub Actions injects GITHUB_ACTOR and GITHUB_TOKEN automatically
+    for every workflow run. No manual secret setup needed.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+          http://maven.apache.org/xsd/settings-1.0.0.xsd">
+    <servers>
+        <server>
+            <!--
+                Same <id> as sdk/pom.xml distributionManagement.
+                Must match exactly.
+            -->
+            <id>github</id>
+            <!-- Populated at runtime by GitHub Actions — never hardcoded -->
+            <username>${env.GITHUB_ACTOR}</username>
+            <password>${env.GITHUB_TOKEN}</password>
+        </server>
+    </servers>
+</settings>

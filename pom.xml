@@ -60,6 +60,8 @@
         <jjwt.version>0.12.6</jjwt.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <testcontainers.version>1.20.4</testcontainers.version>
+
+        <maven.deploy.skip>true</maven.deploy.skip>
     </properties>
 
     <!--
@@ -155,5 +157,7 @@
             </plugins>
         </pluginManagement>
     </build>
+
+
 
 </project>
