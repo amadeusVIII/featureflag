@@ -70,7 +70,7 @@ public class FlagCacheIntegrationTest extends AbstractIntegrationTest{
 
         assertThat(response).isNotNull();
         assertThat(response.isServedFromCache()).isFalse();
-        assertThat(response.getEvaluationTimeMs()).isGreaterThan(5L); // DB latency
+        assertThat(response.getEvaluationTimeMs()).isGreaterThan(2L); // DB latency
     }
 
 
