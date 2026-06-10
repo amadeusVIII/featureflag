@@ -169,9 +169,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Cache Docker layers between workflow runs using GitHub's cache
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # cache-from/cache-to removed — type=gha requires docker-container
+          # buildx driver, not available on standard GitHub Actions runners.
 
       # ── Step: Print the image URI ─────────────────────────────────
       # Print the full image URI so it appears in the workflow logs.
