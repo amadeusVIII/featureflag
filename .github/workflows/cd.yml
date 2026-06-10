@@ -43,12 +43,245 @@ jobs:
           # You do NOT need to add this to your repository secrets manually.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  deploy-api:
-    name: Deploy API (placeholder)
+  # ─────────────────────────────────────────────────────────────────
+  # JOB: build-and-push-image
+  #
+  # Purpose: Build the API Docker image and push it to GitHub Container
+  # Registry (GHCR) so it can be pulled from anywhere — your laptop,
+  # a staging server, or AWS ECS in Step 15.
+  #
+  # Why run after publish-sdk?
+  # The SDK is a dependency of the API. We want to make sure the latest
+  # SDK version is published before we bake the API image. This way the
+  # image always contains a consistent, published SDK version.
+  # ─────────────────────────────────────────────────────────────────
+  build-and-push-image:
+    name: Build and Push API Image to GHCR
     runs-on: ubuntu-latest
     needs: publish-sdk
+
+    # ── Permissions explanation ────────────────────────────────────
+    # packages:write → allows pushing images to GHCR.
+    #   Without this, docker push fails with 403 Forbidden.
+    # contents:read  → allows checkout.
+    permissions:
+      contents: read
+      packages: write
+
+    # ── Output: share the image URI with the next job ──────────────
+    # GitHub Actions jobs run in separate VMs — they share nothing by
+    # default. To pass the built image URI to the deploy-api job below,
+    # we declare it as a job output.
+    #
+    # The value is set inside the steps using the special
+    # $GITHUB_OUTPUT file — GitHub reads it and makes it available
+    # to downstream jobs via: needs.build-and-push-image.outputs.image
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+
     steps:
+
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Deploy API (placeholder)
-        run: echo "API deployment will be configured in Step 14"
+
+      # ── Step: Log in to GHCR ──────────────────────────────────────
+      # Before we can push, we must authenticate to the registry.
+      #
+      # registry: ghcr.io → GitHub Container Registry
+      # username: ${{ github.actor }} → the user or bot that triggered
+      #   this workflow run (e.g. "octocat")
+      # password: GITHUB_TOKEN → automatically provided by GitHub Actions.
+      #   This token has exactly the permissions declared in the
+      #   `permissions:` block above — no more.
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Step: Extract metadata ────────────────────────────────────
+      # This action computes the correct tags and labels for our image.
+      # Why not just hardcode a tag?
+      #
+      # We want TWO tags on every push to main:
+      #
+      # 1. ghcr.io/owner/featureflag/api:sha-abc1234
+      #    → Immutable. Points to the EXACT commit that built this image.
+      #      This is what you reference in deployment configs so you
+      #      always know precisely what code is running.
+      #
+      # 2. ghcr.io/owner/featureflag/api:latest
+      #    → Mutable. Always points to the most recent main build.
+      #      Useful for local development: `docker pull ...api:latest`
+      #      gets you the newest version without knowing the SHA.
+      #
+      # The `id: meta` gives this step a name so we can reference its
+      # outputs in later steps as: steps.meta.outputs.tags
+      - name: Extract Docker metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # The image name — note it's all lowercase (GHCR requires this)
+          # github.repository is automatically "owner/repo-name"
+          images: ghcr.io/${{ github.repository }}/api
+          tags: |
+            # Tag with the short git SHA (first 7 characters)
+            # e.g. sha-abc1234 — immutable, traceable to exact commit
+            type=sha,prefix=sha-,format=short
+            # Tag as 'latest' on every push to main
+            # This is safe because this workflow only triggers on main
+            type=raw,value=latest
+
+      # ── Step: Build and push ──────────────────────────────────────
+      # docker/build-push-action is the standard GitHub Action for
+      # building and pushing Docker images. It handles layer caching,
+      # multi-platform builds, and registry authentication.
+      #
+      # context: . → the build context is the repo root.
+      #   This matches `context: .` in your docker-compose.yml.
+      #   The Dockerfile can COPY files from anywhere in the repo.
+      #
+      # file: api/Dockerfile → path to the Dockerfile to use.
+      #
+      # push: true → actually push to the registry after building.
+      #   If this were false, it would build locally but not upload.
+      #
+      # tags: steps.meta.outputs.tags → the two tags computed above
+      #   (sha-abc1234 and latest). Both get pushed in one operation.
+      #
+      # labels: steps.meta.outputs.labels → standard OCI image labels
+      #   like org.opencontainers.image.source (links image to repo),
+      #   org.opencontainers.image.revision (the commit SHA), etc.
+      #   These appear in the GHCR UI and are good practice.
+      #
+      # cache-from / cache-to → layer caching between workflow runs.
+      #   Docker builds are slow because each RUN instruction in the
+      #   Dockerfile creates a new layer. If nothing changed in that
+      #   layer, we can reuse the cached version from the previous run.
+      #   `type=gha` stores the cache in GitHub Actions cache storage.
+      #   This typically cuts build time from ~4min to ~45sec on warm cache.
+      - name: Build and push API image to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: api/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache Docker layers between workflow runs using GitHub's cache
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ── Step: Print the image URI ─────────────────────────────────
+      # Print the full image URI so it appears in the workflow logs.
+      # This makes it easy to grab the exact image tag after a run
+      # and pull it locally for debugging:
+      #   docker pull ghcr.io/owner/featureflag/api:sha-abc1234
+      - name: Print published image URI
+        run: |
+          echo "✅ Image pushed to GHCR:"
+          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n'
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB: deploy-api
+  #
+  # Current state: Documents what is needed to activate ECS deployment.
+  # This job runs and passes today — it produces a clear, actionable
+  # summary in the workflow logs rather than silently doing nothing.
+  #
+  # To activate real deployment (Step 15):
+  #   1. Complete the Terraform definitions in /infrastructure
+  #   2. Run `terraform apply` to create the ECS cluster, service,
+  #      task definition, RDS instance, and ElastiCache cluster
+  #   3. Add three repository secrets:
+  #        AWS_ACCESS_KEY_ID     → IAM user access key
+  #        AWS_SECRET_ACCESS_KEY → IAM user secret key
+  #        AWS_REGION            → e.g. us-east-1
+  #   4. Replace the echo steps below with the real ECS deploy steps
+  #      shown in the comment at the bottom of this job
+  # ─────────────────────────────────────────────────────────────────
+  deploy-api:
+    name: Deploy API to ECS (pending Terraform)
+    runs-on: ubuntu-latest
+    # Runs after the image is successfully pushed.
+    # If the image push fails, this job is skipped automatically.
+    needs: build-and-push-image
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # ── Document the deployment status ───────────────────────────
+      # This step always passes. It prints the image URI that was just
+      # built and clear instructions for activating ECS deployment.
+      # This is more useful than a silent placeholder or a fake echo.
+      - name: Print deployment status and next steps
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  CD Pipeline Status"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "✅ SDK published to GitHub Packages"
+          echo "✅ API image pushed to GHCR:"
+          echo "   ${{ needs.build-and-push-image.outputs.image }}"
+          echo ""
+          echo "⏳ ECS deployment: pending Terraform (Step 15)"
+          echo ""
+          echo "To activate deployment, complete Step 15 then:"
+          echo "  1. terraform apply (creates ECS cluster + task def)"
+          echo "  2. Add secrets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION"
+          echo "  3. Replace this job with the ECS deploy steps below"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+      # ── ECS DEPLOY STEPS (activate in Step 15) ───────────────────
+      # Uncomment and replace the step above with these once Terraform
+      # has created your ECS infrastructure.
+      #
+      # How this works:
+      # 1. configure-aws-credentials sets up the AWS CLI using the
+      #    secrets you added to your repository settings.
+      # 2. We fetch the current ECS task definition JSON from AWS —
+      #    this is the "template" for how to run the container.
+      # 3. We update the image field in that JSON to point to the
+      #    newly pushed image (the sha-tagged version for traceability).
+      # 4. We register the updated task definition with ECS.
+      # 5. We tell ECS to deploy a new service revision using it.
+      #    ECS does a rolling update: starts new tasks, waits for them
+      #    to be healthy, then stops the old ones. Zero downtime.
+      #
+      # - name: Configure AWS credentials
+      #   uses: aws-actions/configure-aws-credentials@v4
+      #   with:
+      #     aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     aws-region: ${{ secrets.AWS_REGION }}
+      #
+      # - name: Download current ECS task definition
+      #   run: |
+      #     aws ecs describe-task-definition \
+      #       --task-definition featureflag-api \
+      #       --query taskDefinition \
+      #       > task-definition.json
+      #
+      # - name: Update image in task definition
+      #   id: task-def
+      #   uses: aws-actions/amazon-ecs-render-task-definition@v1
+      #   with:
+      #     task-definition: task-definition.json
+      #     container-name: api
+      #     # Use the SHA-tagged image — immutable, traceable
+      #     image: ghcr.io/${{ github.repository }}/api:sha-${{ github.sha }}
+      #
+      # - name: Deploy updated task definition to ECS
+      #   uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+      #   with:
+      #     task-definition: ${{ steps.task-def.outputs.task-definition }}
+      #     service: featureflag-api
+      #     cluster: featureflag-cluster
+      #     # Wait until new tasks are healthy before marking deploy success
+      #     # If new tasks fail health checks, ECS rolls back automatically
+      #     wait-for-service-stability: true
