@@ -15,7 +15,10 @@
         <!-- Braces always required, even for single-line if statements -->
         <module name="NeedBraces"/>
         <!-- Constant names must be UPPER_SNAKE_CASE -->
-        <module name="ConstantName"/>
+        <module name="ConstantName">
+            <!-- Allow 'log' as a constant name — needed for @Slf4j compatibility -->
+            <property name="format" value="^log$|^[A-Z][A-Z0-9]*(_[A-Z0-9]+)*$"/>
+        </module>
         <!-- Method names must be camelCase -->
         <module name="MethodName"/>
     </module>
