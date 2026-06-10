@@ -1,0 +1,291 @@
+name: CI
+
+# ─────────────────────────────────────────────────────────────────
+# WHEN does this workflow run?
+#
+# - On every push to main, develop, or any feature/* branch.
+#   This gives you feedback as you work, not just when you merge.
+#
+# - On every pull request targeting main or develop.
+#   This is the safety net: the PR cannot be merged if CI is red.
+# ─────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'   # matches feature/any-name
+  pull_request:
+    branches:
+      - main
+      - develop
+
+# ─────────────────────────────────────────────────────────────────
+# PERMISSIONS
+#
+# Minimal permissions following the principle of least privilege.
+# contents:read  — allows checkout
+# packages:read  — allows pulling packages from GitHub Packages if needed
+# ─────────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 1: lint-and-test
+  #
+  # Purpose: Verify code quality and correctness BEFORE we spend
+  # time building Docker images. Fast feedback loop.
+  #
+  # Runs: Checkstyle → Unit tests → Integration tests (Testcontainers)
+  # ─────────────────────────────────────────────────────────────────
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ── Step 1: Get the code ──────────────────────────────────────
+      # actions/checkout clones your repository into the runner VM.
+      # Without this, every subsequent step has no files to work with.
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # ── Step 2: Install Java ──────────────────────────────────────
+      # The runner VM is a blank Ubuntu machine. We need to install
+      # Java before we can run Maven.
+      #
+      # distribution: 'temurin' → Eclipse Temurin (formerly AdoptOpenJDK)
+      #   This is the most widely used, free, open-source JDK distribution.
+      #
+      # cache: maven → After the first run, ~/.m2/repository is cached.
+      #   On subsequent runs, Maven skips re-downloading dependencies,
+      #   cutting job time from ~3min to ~30sec on warm cache.
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # ── Step 3: Checkstyle ───────────────────────────────────────
+      # Checkstyle enforces a consistent code style across the team.
+      # It checks things like: indentation, naming conventions, line
+      # length, import ordering, Javadoc presence.
+      #
+      # Why run this in CI and not just locally?
+      # Because developers forget. CI catches it before it reaches main.
+      #
+      # If you haven't configured Checkstyle yet, this step will fail.
+      # See: api/src/main/resources/checkstyle.xml
+      # We'll handle that below with a note.
+      - name: Run Checkstyle
+        run: |
+          ./mvnw checkstyle:check \
+            --no-transfer-progress \
+            -pl api,sdk
+
+      # ── Step 4: Unit tests ───────────────────────────────────────
+      # Unit tests run in memory. No Docker, no Redis, no PostgreSQL.
+      # Everything external is mocked with Mockito.
+      #
+      # Why separate from integration tests?
+      # Unit tests finish in seconds. If your business logic is broken,
+      # you want to know NOW — not after waiting 2 minutes for containers
+      # to spin up.
+      #
+      # -pl api,sdk  → run tests in both the api and sdk modules
+      # -am          → also build modules they depend on first
+      - name: Run unit tests
+        run: |
+          ./mvnw test \
+            --no-transfer-progress \
+            -pl api,sdk -am
+
+      # ── Step 5: Integration tests ─────────────────────────────────
+      # Integration tests use Testcontainers. When these tests run,
+      # Testcontainers automatically starts real Docker containers for
+      # PostgreSQL and Redis — no mocking. This proves the cache-aside
+      # pattern and Pub/Sub invalidation ACTUALLY work end-to-end.
+      #
+      # The GitHub Actions runner has Docker pre-installed, so
+      # Testcontainers works out of the box — nothing extra to configure.
+      #
+      # -Pintegration-tests  → activates the Maven profile that runs
+      #   classes annotated with @Tag("integration")
+      #   (you define this profile in your pom.xml)
+      - name: Run integration tests (Testcontainers)
+        run: |
+          ./mvnw verify \
+            --no-transfer-progress \
+            -pl api -am \
+            -Pintegration-tests
+
+      # ── Step 6: Upload test reports ───────────────────────────────
+      # Even if tests fail, upload the Surefire XML reports as an artifact.
+      # You can download them from the Actions UI to see exactly which
+      # tests failed and the full stack traces.
+      #
+      # if: always() → run this step even when previous steps failed.
+      #   Without this, a test failure would prevent the report upload,
+      #   which is exactly when you need the report most.
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          # Glob pattern: find Surefire XML reports in any module
+          path: '**/target/surefire-reports/*.xml'
+          # Don't fail if no reports were generated (e.g. compile error)
+          if-no-files-found: warn
+          # Keep reports for 7 days — enough time to investigate failures
+          retention-days: 7
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB 2: build-docker
+  #
+  # Purpose: Verify that the Docker image BUILDS successfully and
+  # that all 4 containers start up cleanly and pass health checks.
+  #
+  # Why is this a SEPARATE job from lint-and-test?
+  # 1. It only runs if lint-and-test passed (needs: lint-and-test).
+  #    No point building Docker if your tests are broken.
+  # 2. It runs in PARALLEL with other potential jobs, saving time.
+  # 3. A Docker build failure is a different kind of failure than a
+  #    test failure — keeping them separate makes the failure obvious.
+  # ─────────────────────────────────────────────────────────────────
+  build-docker:
+    name: Build and Smoke Test Docker
+    runs-on: ubuntu-latest
+
+    # This job will NOT start until lint-and-test finishes successfully.
+    # If lint-and-test fails, this job is skipped automatically.
+    needs: lint-and-test
+
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # ── Create a .env file for Docker Compose ─────────────────────
+      # docker-compose.yml references ${DB_USER}, ${DB_PASS}, ${JWT_SECRET}.
+      # In production these come from real secrets. In CI, we just need
+      # safe dummy values so the containers start — there's no real data.
+      #
+      # We write these inline rather than putting them in repository secrets
+      # because these are CI-only throwaway values, not real credentials.
+      - name: Create CI .env file
+        run: |
+          cat > .env << 'EOF'
+          DB_USER=ci_user
+          DB_PASS=ci_password_only_for_tests
+          JWT_SECRET=ci-jwt-secret-must-be-at-least-32-characters-long
+          EOF
+
+      # ── Build all Docker images ───────────────────────────────────
+      # docker compose build reads your docker-compose.yml and builds
+      # every service that has a `build:` section (i.e. the api service).
+      # nginx, postgres, and redis use pre-built images so they're just
+      # pulled from Docker Hub.
+      #
+      # --no-cache → always build from scratch in CI. This catches issues
+      #   that a developer's warm local cache might hide (e.g. a missing
+      #   COPY instruction in the Dockerfile).
+      - name: Build Docker images
+        run: docker compose build --no-cache
+
+      # ── Start all containers ──────────────────────────────────────
+      # docker compose up -d starts all services in detached mode
+      # (background). Docker Compose respects the depends_on + health
+      # checks in your docker-compose.yml, so nginx won't start until
+      # the api is healthy, and api won't start until postgres and redis
+      # are healthy.
+      - name: Start all containers
+        run: docker compose up -d
+
+      # ── Wait for health checks ────────────────────────────────────
+      # Spring Boot needs time to start. We wait for the /actuator/health
+      # endpoint to return 200 before running the smoke test.
+      #
+      # Why not just use `sleep 60`?
+      # A fixed sleep either wastes time (when the app starts in 20s)
+      # or fails (when the app is slow on a busy runner). Polling is smarter.
+      #
+      # This loop tries every 5 seconds for up to 90 seconds.
+      # If the app isn't healthy after 90s, we fail loudly.
+      - name: Wait for API to become healthy
+        run: |
+          echo "Waiting for API to become healthy..."
+          for i in $(seq 1 18); do
+            if curl -sf http://localhost/actuator/health > /dev/null 2>&1; then
+              echo "✅ API is healthy after $((i * 5)) seconds"
+              exit 0
+            fi
+            echo "  Attempt $i/18 — not ready yet, waiting 5s..."
+            sleep 5
+          done
+          echo "❌ API did not become healthy within 90 seconds"
+          docker compose logs api
+          exit 1
+
+      # ── Smoke test ────────────────────────────────────────────────
+      # A smoke test is a minimal check: "does the thing turn on?"
+      # We're not testing business logic here — that's what unit and
+      # integration tests are for.
+      #
+      # We check three things:
+      # 1. The health endpoint returns HTTP 200
+      # 2. The response body says "status":"UP"
+      # 3. The auth endpoint exists (returns 400, not 404)
+      - name: Run smoke tests
+        run: |
+          echo "--- Smoke Test 1: Health endpoint returns UP ---"
+          HEALTH=$(curl -sf http://localhost/actuator/health)
+          echo "Response: $HEALTH"
+          echo "$HEALTH" | grep -q '"status":"UP"' || {
+            echo "❌ Health check failed — status is not UP"
+            exit 1
+          }
+          echo "✅ Health check passed"
+
+          echo ""
+          echo "--- Smoke Test 2: Auth endpoint is reachable ---"
+          # POST with no body returns 400 Bad Request (not 404 Not Found)
+          # 400 means the endpoint exists, just the request is invalid
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST http://localhost/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{}')
+          echo "Auth endpoint HTTP status: $STATUS"
+          # Accept 400 (validation error) or 200 — both mean the endpoint exists
+          # Reject 404 (endpoint missing) or 500 (server crash)
+          [ "$STATUS" = "400" ] || [ "$STATUS" = "200" ] || {
+            echo "❌ Auth endpoint returned unexpected status: $STATUS"
+            exit 1
+          }
+          echo "✅ Auth endpoint is reachable"
+
+      # ── Print logs on failure ─────────────────────────────────────
+      # If anything above fails, print all container logs before
+      # the containers are torn down. This is the most useful
+      # debugging information you'll have.
+      - name: Print container logs on failure
+        if: failure()
+        run: |
+          echo "=== API logs ==="
+          docker compose logs api
+          echo "=== PostgreSQL logs ==="
+          docker compose logs postgres
+          echo "=== Redis logs ==="
+          docker compose logs redis
+          echo "=== Nginx logs ==="
+          docker compose logs nginx
+
+      # ── Tear down ─────────────────────────────────────────────────
+      # Always clean up, even if tests fail. Otherwise containers
+      # accumulate on the runner and waste disk space.
+      # -v removes named volumes (postgres_data, redis_data)
+      - name: Tear down containers
+        if: always()
+        run: docker compose down -v

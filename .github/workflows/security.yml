@@ -1,0 +1,136 @@
+name: Security Scan
+
+# ─────────────────────────────────────────────────────────────────
+# WHEN does this workflow run?
+#
+# 1. On every push to main — so any newly deployed image is scanned.
+#
+# 2. On a weekly schedule (every Monday at 9:00 AM UTC).
+#    Why weekly? Because new CVEs are published every day. Your code
+#    might be perfectly safe today, but a vulnerability could be
+#    discovered in a library you use next week. The scheduled scan
+#    catches this WITHOUT requiring a new commit.
+#
+# cron syntax: minute hour day-of-month month day-of-week
+# '0 9 * * 1' = at 09:00, on Monday (1), every month, every day-of-month
+# ─────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: '0 9 * * 1'  # Every Monday at 9am UTC
+
+# ─────────────────────────────────────────────────────────────────
+# PERMISSIONS
+#
+# security-events:write → required to upload SARIF results to the
+#   GitHub Security tab. Without this, the upload step fails with 403.
+#
+# contents:read → required for checkout.
+# ─────────────────────────────────────────────────────────────────
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+
+  # ─────────────────────────────────────────────────────────────────
+  # JOB: trivy-scan
+  #
+  # Trivy is a free, open-source vulnerability scanner. It scans your
+  # Docker image and checks every dependency against the CVE database.
+  #
+  # SARIF = Static Analysis Results Interchange Format.
+  # It's a standard JSON format for security tool output.
+  # GitHub understands SARIF and shows results in the Security tab
+  # under "Code scanning alerts" — no extra setup needed.
+  # ─────────────────────────────────────────────────────────────────
+  trivy-scan:
+    name: Trivy Container Scan
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # ── Set up Java (needed to build the Docker image) ────────────
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # ── Create a minimal .env for the Docker build ────────────────
+      # We need a .env file so docker compose build doesn't complain
+      # about missing variables. Actual values don't matter for a scan.
+      - name: Create CI .env file
+        run: |
+          cat > .env << 'EOF'
+          DB_USER=scan_user
+          DB_PASS=scan_password
+          JWT_SECRET=scan-jwt-secret-at-least-32-characters-long
+          EOF
+
+      # ── Build the Docker image to scan ───────────────────────────
+      # We build and tag it with a specific name for Trivy to reference.
+      # We only scan the API image — it contains our custom code and
+      # is the highest-risk surface (the nginx and postgres images are
+      # maintained by others and scanned separately by their owners).
+      - name: Build API Docker image for scanning
+        run: |
+          docker build \
+            -t featureflag-api:scan \
+            -f api/Dockerfile \
+            .
+
+      # ── Run Trivy scan ────────────────────────────────────────────
+      # What Trivy checks:
+      #   - OS packages (Alpine apk packages) for known CVEs
+      #   - Java dependencies (JARs in the image) via SBOM
+      #   - Misconfigurations in the Dockerfile (optional)
+      #
+      # severity: CRITICAL,HIGH
+      #   → Only report Critical and High CVEs.
+      #   → Ignoring MEDIUM and LOW keeps signal-to-noise ratio high.
+      #     You can tighten this once your team is comfortable triaging.
+      #
+      # exit-code: '1'
+      #   → Fail the job if any CRITICAL or HIGH CVE is found.
+      #   → This is what makes the security scan actually block deploys.
+      #
+      # format: sarif
+      #   → Output results as SARIF so GitHub can display them in the
+      #     Security tab as "Code scanning alerts".
+      #
+      # ignore-unfixed: true
+      #   → Skip CVEs that have no fix available yet. These are real
+      #     vulnerabilities but there's nothing you can do about them
+      #     right now — don't let them block deploys.
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'featureflag-api:scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
+
+      # ── Upload results to GitHub Security tab ────────────────────
+      # This step runs even if Trivy found vulnerabilities (if: always()).
+      # Why? Because we want the results visible in the Security tab
+      # even when the job fails — that's when the results matter most.
+      #
+      # After uploading, go to: your repo → Security → Code scanning alerts
+      # You'll see each CVE listed with affected package, version, and
+      # a link to the CVE description.
+      - name: Upload Trivy results to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          # Category label shown in the Security tab
+          category: 'trivy-container-scan'
