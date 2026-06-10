@@ -1,0 +1,51 @@
+/* Tailwind base layers */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base font is set globally — Plus Jakarta Sans for all text */
+@layer base {
+  html, body {
+    @apply font-sans text-slate-800 bg-slate-50;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Data values, cache badges, timestamps use monospace */
+  .font-data {
+    @apply font-mono text-xs tracking-wide;
+  }
+}
+
+/* Smooth toggle animation — used by ToggleSwitch component */
+@layer components {
+  .toggle-knob {
+    transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Subtle entrance animation for cards/rows */
+  .fade-in-up {
+    animation: fadeInUp 0.25s ease-out both;
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Pulse dot for live cache status indicators */
+  .pulse-dot {
+    animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+}

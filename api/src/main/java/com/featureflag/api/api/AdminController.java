@@ -4,12 +4,10 @@ import com.featureflag.api.api.dto.CreateFlagRequest;
 import com.featureflag.api.api.dto.FlagResponse;
 import com.featureflag.api.api.dto.UpdateFlagRequest;
 import com.featureflag.api.domain.audit.AuditLog;
+import com.featureflag.api.domain.audit.AuditLogRepository;
 import com.featureflag.api.domain.flag.Flag;
 import com.featureflag.api.domain.flag.FlagService;
 import jakarta.validation.Valid;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -18,17 +16,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.UUID;
 
 
 @RestController
@@ -38,6 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminController {
 
     private final FlagService flagService;
+
+    // Injected directly here because global audit reads are not flag-scoped.
+    // FlagService owns audit *writes*; the controller owns this read-only view.
+    private final AuditLogRepository auditLogRepository;
 
 
     @GetMapping("/flags")
@@ -107,6 +102,15 @@ public class AdminController {
         return ResponseEntity.ok(flagService.getAuditLog(id));
     }
 
-}
 
-//just checking
+
+    @GetMapping("/audit")
+    public ResponseEntity<List<AuditLog>> getGlobalAuditLog() {
+
+        List<AuditLog> entries = auditLogRepository.findAllByOrderByCreatedAtDesc();
+        log.debug("Global audit log requested — {} entries returned", entries.size());
+        return ResponseEntity.ok(entries);
+    }
+
+
+}

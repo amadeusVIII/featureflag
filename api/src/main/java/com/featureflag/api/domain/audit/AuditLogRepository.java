@@ -11,7 +11,12 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface AuditLogRepository extends JpaRepository<AuditLog, UUID> {
 
+
     List<AuditLog> findByEntityIdOrderByCreatedAtDesc(UUID entityId);
 
+
     List<AuditLog> findByChangedByOrderByCreatedAtDesc(UUID changedBy);
+
+
+    List<AuditLog> findAllByOrderByCreatedAtDesc();
 }
