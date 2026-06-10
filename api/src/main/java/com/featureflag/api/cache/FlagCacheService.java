@@ -2,15 +2,15 @@ package com.featureflag.api.cache;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import java.time.Duration;
-import java.time.Instant;
+import com.featureflag.api.domain.flag.EvaluationReason;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
-import com.featureflag.api.domain.flag.EvaluationReason;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Optional;
 
 @Service

@@ -3,15 +3,10 @@ package com.featureflag.api.domain.flag;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.featureflag.api.api.dto.CreateFlagRequest;
-import com.featureflag.api.api.dto.FlagResponse;
 import com.featureflag.api.api.dto.UpdateFlagRequest;
 import com.featureflag.api.cache.FlagChangePublisher;
 import com.featureflag.api.domain.audit.AuditLog;
 import com.featureflag.api.domain.audit.AuditLogRepository;
-import java.time.Instant;
-import java.util.List;
-import java.util.UUID;
-
 import com.featureflag.api.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +16,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
 
 @Service

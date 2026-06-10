@@ -12,7 +12,6 @@ import org.springframework.http.*;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.Map;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

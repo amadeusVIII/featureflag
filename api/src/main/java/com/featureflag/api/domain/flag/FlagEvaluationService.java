@@ -5,12 +5,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.featureflag.api.cache.CachedEvaluationResult;
 import com.featureflag.api.cache.FlagCacheService;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -95,8 +96,8 @@ public class FlagEvaluationService {
 
 
     private boolean isInRollout(String flagKey, String userId, int rolloutPercentage) {
-        if (rolloutPercentage >= 100) return true;
-        if (rolloutPercentage <= 0) return false;
+        if (rolloutPercentage >= 100){ return true;}
+        if (rolloutPercentage <= 0){ return false;}
         String hashInput = flagKey + ":" + userId;
         int bucket = Math.abs(hashInput.hashCode()) % 100;
         return bucket < rolloutPercentage;
