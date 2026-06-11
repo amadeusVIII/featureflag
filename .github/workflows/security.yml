@@ -82,9 +82,9 @@ jobs:
       - name: Build API Docker image for scanning
         run: |
           docker build \
+            --pull \
             -t featureflag-api:scan \
             -f api/Dockerfile \
-            .
 
       # ── Run Trivy scan ────────────────────────────────────────────
       # What Trivy checks:
