@@ -87,50 +87,36 @@ jobs:
             -f api/Dockerfile \
             .
 
-      # ── Run Trivy scan ────────────────────────────────────────────
-      # What Trivy checks:
-      #   - OS packages (Alpine apk packages) for known CVEs
-      #   - Java dependencies (JARs in the image) via SBOM
-      #   - Misconfigurations in the Dockerfile (optional)
-      #
-      # severity: CRITICAL,HIGH
-      #   → Only report Critical and High CVEs.
-      #   → Ignoring MEDIUM and LOW keeps signal-to-noise ratio high.
-      #     You can tighten this once your team is comfortable triaging.
-      #
-      # exit-code: '1'
-      #   → Fail the job if any CRITICAL or HIGH CVE is found.
-      #   → This is what makes the security scan actually block deploys.
-      #
-      # format: sarif
-      #   → Output results as SARIF so GitHub can display them in the
-      #     Security tab as "Code scanning alerts".
-      #
-      # ignore-unfixed: true
-      #   → Skip CVEs that have no fix available yet. These are real
-      #     vulnerabilities but there's nothing you can do about them
-      #     right now — don't let them block deploys.
-      - name: Run Trivy vulnerability scan
+      # ── Step 1: Generate SARIF for GitHub UI (No exit code) ────────
+      # This captures ALL severities for the Security tab but won't
+      # fail your pipeline if it finds a Medium vulnerability.
+      - name: Run Trivy to generate SARIF
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'featureflag-api:scan'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'
           ignore-unfixed: true
 
-      # ── Upload results to GitHub Security tab ────────────────────
+      # ── Step 2: Upload the SARIF report ────────────────────────────
       # This step runs even if Trivy found vulnerabilities (if: always()).
       # Why? Because we want the results visible in the Security tab
       # even when the job fails — that's when the results matter most.
-      #
-      # After uploading, go to: your repo → Security → Code scanning alerts
-      # You'll see each CVE listed with affected package, version, and
-      # a link to the CVE description.
       - name: Upload Trivy results to GitHub Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@v4  # was v3, v3 deprecated Dec 2026
+        uses: github/codeql-action/upload-sarif@v4
         with:
-            sarif_file: 'trivy-results.sarif'
-            category: 'trivy-container-scan'
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy-container-scan'
+
+      # ── Step 3: Enforce build failure for Critical/High ────────────
+      # This runs a quick secondary scan. It outputs a readable table
+      # to your logs and successfully fails the build if threshold is met.
+      - name: Run Trivy vulnerability scan (Terminal & Enforce)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'featureflag-api:scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+          ignore-unfixed: true
