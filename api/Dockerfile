@@ -5,6 +5,9 @@
 # ─────────────────────────────────────────────
 FROM eclipse-temurin:21-jdk-alpine AS build
 
+RUN apk update && \
+    apk upgrade --no-cache openssl libssl3
+
 WORKDIR /app
 
 # Copy the Maven wrapper first — this is a Docker layer caching trick.
@@ -43,6 +46,9 @@ RUN ./mvnw package -pl api -DskipTests -q
 # Result: image is ~200MB instead of ~600MB
 # ─────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine AS runtime
+
+RUN apk update && \
+    apk upgrade --no-cache openssl libssl3
 
 WORKDIR /app
 
