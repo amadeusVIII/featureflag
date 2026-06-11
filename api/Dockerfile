@@ -75,7 +75,4 @@ USER appuser
 
 # Start the application.
 # SPRING_PROFILE env var comes from docker-compose.yml environment section.
-ENTRYPOINT ["java", \
-  "-jar", \
-  "-Dspring.profiles.active=${SPRING_PROFILE:-prod}", \
-  "app.jar"]
+ENTRYPOINT java -jar -Dspring.profiles.active=${SPRING_PROFILE:-prod} app.jar
