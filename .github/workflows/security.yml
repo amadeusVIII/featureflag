@@ -75,16 +75,17 @@ jobs:
           EOF
 
       # ── Build the Docker image to scan ───────────────────────────
-      # We build and tag it with a specific name for Trivy to reference.
-      # We only scan the API image — it contains our custom code and
-      # is the highest-risk surface (the nginx and postgres images are
-      # maintained by others and scanned separately by their owners).
+      # --pull forces Docker to always fetch the latest version of the
+      # base image (eclipse-temurin:21-jre-alpine) from the registry
+      # before building. Without this, Docker reuses a stale cached
+      # layer that may contain outdated OpenSSL or Alpine packages.
       - name: Build API Docker image for scanning
         run: |
           docker build \
             --pull \
             -t featureflag-api:scan \
             -f api/Dockerfile \
+            .
 
       # ── Run Trivy scan ────────────────────────────────────────────
       # What Trivy checks:
@@ -129,8 +130,7 @@ jobs:
       # a link to the CVE description.
       - name: Upload Trivy results to GitHub Security tab
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4  # was v3, v3 deprecated Dec 2026
         with:
-          sarif_file: 'trivy-results.sarif'
-          # Category label shown in the Security tab
-          category: 'trivy-container-scan'
+            sarif_file: 'trivy-results.sarif'
+            category: 'trivy-container-scan'
