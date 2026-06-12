@@ -1,6 +1,5 @@
 package com.featureflag.sdk;
 
-import com.featureflag.sdk.internal.FeatureFlagClient;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -15,7 +14,7 @@ import java.time.Duration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 class FeatureFlagClientTest {
-    
+
     private MockWebServer mockServer;
     private FeatureFlagClient client;
 

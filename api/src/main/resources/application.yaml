@@ -9,8 +9,8 @@ spring:
   # Database connection
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/featureflag}
-    username: ${SPRING_DATASOURCE_USERNAME:maher}
-    password: ${SPRING_DATASOURCE_PASSWORD:icarus}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
     # HikariCP connection pool — always configure this explicitly
     hikari:
       maximum-pool-size: 10

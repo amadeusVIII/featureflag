@@ -79,8 +79,10 @@ services:
   # ─────────────────────────────────────────────
   postgres:
     image: postgres:17-alpine
-    ports:
-      - "5432:5432"
+    # No ports exposed here — PostgreSQL must never be directly reachable
+    # from outside the Docker network in a production-like environment.
+    # For local development (DBeaver, DataGrip), port 5432 is exposed
+    # in docker-compose.override.yml which is only used locally.
     environment:
       POSTGRES_DB: featureflag
       POSTGRES_USER: ${DB_USER}
