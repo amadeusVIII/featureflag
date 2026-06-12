@@ -24,7 +24,6 @@ public class FlagRule {
     @JoinColumn(name = "flag_id", nullable = false)
     private Flag flag;
 
-
     @Column(name = "rule_order", nullable = false)
     @Builder.Default
     private int ruleOrder = 0;
@@ -36,7 +35,8 @@ public class FlagRule {
     @Column(nullable = false, length = 20)
     private RuleOperator operator;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+
+    @Column(name = "\"values\"", nullable = false, columnDefinition = "TEXT")
     private String values;
 
     @Column(name = "serve_value", nullable = false)

@@ -16,11 +16,11 @@ import java.util.UUID;
         uniqueConstraints = {
                 @UniqueConstraint(
                         name = "uq_flags_key_environment",
-                        columnNames = {"key", "environment"}
+
+                        columnNames = {"\"key\"", "environment"}
                 )
         }
 )
-
 @Data
 @Builder
 @NoArgsConstructor
@@ -31,7 +31,8 @@ public class Flag {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, length = 100)
+
+    @Column(name = "\"key\"", nullable = false, length = 100)
     private String key;
 
     @Column(nullable = false, length = 200)
@@ -41,7 +42,7 @@ public class Flag {
     private String description;
 
     @Column(nullable = false)
-    private  boolean enabled;
+    private boolean enabled;
 
     @Column(nullable = false, length = 50)
     @Builder.Default
@@ -51,16 +52,13 @@ public class Flag {
     @Builder.Default
     private int rolloutPercentage = 100;
 
-
     @Enumerated(EnumType.STRING)
     @Column(name = "flag_type", nullable = false, length = 20)
     @Builder.Default
     private FlagType flagType = FlagType.BOOLEAN;
 
-
     @Column(name = "string_value", length = 500)
     private String stringValue;
-
 
     @Column(name = "created_by", nullable = false)
     private UUID createdBy;

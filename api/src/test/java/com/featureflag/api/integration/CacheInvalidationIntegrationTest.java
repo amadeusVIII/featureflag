@@ -221,11 +221,22 @@ public class CacheInvalidationIntegrationTest extends AbstractIntegrationTest{
     }
 
     private FlagEvaluationResponse evaluate(String key, String userId) {
-        return restTemplate.getForObject(
+        HttpHeaders headers = new HttpHeaders();
+        // The /evaluate endpoint requires authentication.
+        // We reuse the admin JWT — any valid user token works here.
+        headers.setBearerAuth(adminToken);
+
+        ResponseEntity<FlagEvaluationResponse> response = restTemplate.exchange(
                 baseUrl + "/api/v1/flags/evaluate?key={key}&userId={userId}&environment=production",
+                HttpMethod.GET,
+                new HttpEntity<>(headers),    // pass headers with the request
                 FlagEvaluationResponse.class,
                 key, userId
         );
+
+        // Use exchange() instead of getForObject() so we can see the status code
+        // if something goes wrong — getForObject() silently returns null on errors.
+        return response.getBody();
     }
 
 }
