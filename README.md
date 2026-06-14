@@ -215,8 +215,8 @@ boolean showNewCheckout = client.isEnabled("new-checkout-flow", userId);
 client.warmCache("production");
 ```
 
-[→ Full SDK documentation](sdk/README.md)
-[→ SDK on GitHub Packages](https://github.com/YOUR_USERNAME/featureflag/packages)
+
+[→ SDK on GitHub Packages](https://github.com/amadeusVIII/featureflag/packages)
 
 ---
 
@@ -256,8 +256,6 @@ DELETE /api/v1/admin/flags/{id}         Delete flag
 GET    /api/v1/admin/flags/{id}/audit   Full audit history
 ```
 
-[→ Full API reference](docs/api-reference.md)
-[→ OpenAPI/Swagger UI at http://localhost:8080/swagger-ui.html (dev only)](http://localhost:8080/swagger-ui.html)
 
 ---
 
@@ -279,7 +277,7 @@ test run. They assert:
 
 No mocking of infrastructure. The tests prove the caching behavior actually works.
 
-[→ View latest CI run](https://github.com/YOUR_USERNAME/featureflag/actions)
+[→ View latest CI run](https://github.com/amadeusVIII/featureflag/actions)
 
 ---
 
@@ -387,8 +385,7 @@ terraform plan -var="db_password=yourpassword" -var="jwt_secret=yourjwtsecret"
 terraform apply
 ```
 
-The live demo runs on Railway (zero-cost):
-[→ https://featureflag.up.railway.app](https://featureflag.up.railway.app)
+
 
 ---
 
